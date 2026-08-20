@@ -68,6 +68,7 @@ public enum ErrorCode {
 
     // ========== 语音面试模块错误 10xxx ==========
     VOICE_SESSION_NOT_FOUND(10001, "语音面试会话不存在"),
+    VOICE_WS_SESSION_NOT_CONNECTED(10002, "语音面试 WebSocket 会话未连接"),
     VOICE_EVALUATION_FAILED(10004, "语音面试评估失败"),
     VOICE_EVALUATION_NOT_FOUND(10006, "语音面试评估结果不存在"),
 
