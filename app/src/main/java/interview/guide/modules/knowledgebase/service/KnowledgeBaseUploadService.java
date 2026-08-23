@@ -35,7 +35,7 @@ public class KnowledgeBaseUploadService {
     private final FileHashService fileHashService;
     private final VectorizeStreamProducer vectorizeStreamProducer;
 
-    private static final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    private static final long MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB
     
     /**
      * 上传知识库文件

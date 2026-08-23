@@ -175,6 +175,12 @@ app:
         topk-long: ${APP_AI_RAG_TOPK_LONG:8}
         min-score-short: ${APP_AI_RAG_MIN_SCORE_SHORT:0.18}
         min-score-default: ${APP_AI_RAG_MIN_SCORE_DEFAULT:0.28}
+      hybrid:
+        enabled: ${APP_AI_RAG_HYBRID_ENABLED:false}
+        candidate-multiplier: ${APP_AI_RAG_HYBRID_CANDIDATE_MULTIPLIER:3}
+        bm25-k1: ${APP_AI_RAG_HYBRID_BM25_K1:1.2}
+        bm25-b: ${APP_AI_RAG_HYBRID_BM25_B:0.75}
+        rrf-k: ${APP_AI_RAG_HYBRID_RRF_K:60}
 
   interview:
     follow-up-count: ${APP_INTERVIEW_FOLLOW_UP_COUNT:1}

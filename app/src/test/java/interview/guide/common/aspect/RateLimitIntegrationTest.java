@@ -76,8 +76,8 @@ class RateLimitIntegrationTest {
         assertEquals(1L, executeLuaScript(key, maxCount));
         assertEquals(1L, executeLuaScript(key, maxCount));
 
-        // 第三次请求应被拒绝
-        assertEquals(0L, executeLuaScript(key, maxCount));
+        // 第三次请求应被拒绝（脚本返回 -i 标识第 i 条规则拒绝，单规则即 -1）
+        assertEquals(-1L, executeLuaScript(key, maxCount));
     }
 
     @Test
@@ -114,10 +114,38 @@ class RateLimitIntegrationTest {
         // 全局维度耗尽
         assertEquals(1L, executeLuaScript(globalKey, 2));
         assertEquals(1L, executeLuaScript(globalKey, 2));
-        assertEquals(0L, executeLuaScript(globalKey, 2));
+        assertEquals(-1L, executeLuaScript(globalKey, 2));
 
         // IP维度仍有令牌（证明独立计数）
         assertEquals(1L, executeLuaScript(ipKey, 5));
+    }
+
+    @Test
+    @DisplayName("回归：后续维度拒绝时，不得提前删除前面维度已过期的记录（防止令牌泄漏）")
+    void testExpiredRecordsNotDeletedWhenLaterRuleRejects() {
+        String globalKey = "ratelimit:test:leak:global";
+        String ipKey = "ratelimit:test:leak:ip";
+        long globalMax = 10;
+        long ipMax = 1;
+        long now = System.currentTimeMillis();
+
+        // 全局维度 value 已耗尽为 0，但 zset 里有一条 5 秒前过期的记录（价值 3 个令牌）
+        redissonClient.getBucket(globalKey + ":value", StringCodec.INSTANCE).set("0");
+        redissonClient.getScoredSortedSet(globalKey + ":permits", StringCodec.INSTANCE)
+            .add(now - 5000, "expired-req:1:3");
+
+        // IP 维度 value 为 0，直接触发拒绝
+        redissonClient.getBucket(ipKey + ":value", StringCodec.INSTANCE).set("0");
+
+        // 全局维度本可通过（有 3 个过期令牌可回收），但 IP 维度拒绝 → 整体拒绝
+        assertEquals(-2L, executeLuaScript(List.of(globalKey, ipKey), List.of(globalMax, ipMax)));
+
+        // 关键断言：全局维度 value 不变，且过期记录仍保留、未被提前删除
+        assertEquals("0", redissonClient.getBucket(globalKey + ":value", StringCodec.INSTANCE).get());
+        assertTrue(
+            redissonClient.getScoredSortedSet(globalKey + ":permits", StringCodec.INSTANCE)
+                .readAll().contains("expired-req:1:3"),
+            "拒绝时不应删除已过期的记录，否则其令牌无法回收造成泄漏");
     }
 
     private long executeLuaScript(String key, long maxCount) {

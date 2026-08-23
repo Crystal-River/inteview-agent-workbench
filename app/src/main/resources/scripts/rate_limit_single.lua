@@ -18,7 +18,8 @@ local current_values = {}
 local permit_values = {}
 local intervals = {}
 
--- 第一阶段：回收过期令牌并检查所有维度。任一维度不满足时，不扣任何新令牌。
+-- 第一阶段：只做「只读」检查。统计过期令牌、计算可用额度，但不写入任何数据。
+-- 任一维度不满足时直接返回，保证不会出现「已回收过期记录却未恢复 value」的令牌泄漏。
 for i = 1, rule_count do
     local arg_index = 4 + (i - 1) * 3
     local key = KEYS[i]
@@ -30,33 +31,28 @@ for i = 1, rule_count do
 
     local current_val = tonumber(redis.call("get", value_key)) or max_tokens
 
+    -- 只读取过期记录并累加令牌数，不删除
+    local expired_count = 0
     local expired_values = redis.call("zrangebyscore", permits_key, 0, now_ms - interval)
-    if #expired_values > 0 then
-        local expired_count = 0
-        for _, v in ipairs(expired_values) do
-            local p = tonumber(string.match(v, ":(%d+)$"))
-            if p then
-                expired_count = expired_count + p
-            end
-        end
-
-        redis.call("zremrangebyscore", permits_key, 0, now_ms - interval)
-
-        if expired_count > 0 then
-            current_val = math.min(max_tokens, current_val + expired_count)
+    for _, v in ipairs(expired_values) do
+        local p = tonumber(string.match(v, ":(%d+)$"))
+        if p then
+            expired_count = expired_count + p
         end
     end
 
-    if current_val < permits then
+    local available = math.min(max_tokens, current_val + expired_count)
+
+    if available < permits then
         return -i
     end
 
-    current_values[i] = current_val
+    current_values[i] = available
     permit_values[i] = permits
     intervals[i] = interval
 end
 
--- 第二阶段：所有维度都通过后再统一扣减。
+-- 第二阶段：所有维度都通过后，再统一回收过期令牌并扣减。
 for i = 1, rule_count do
     local key = KEYS[i]
     local value_key = key .. ":value"
@@ -64,6 +60,9 @@ for i = 1, rule_count do
     local permits = permit_values[i]
     local current_val = current_values[i]
     local interval = intervals[i]
+
+    -- 先删除过期记录（此时所有维度已确认通过，删除后再不会因拒绝而无法恢复）
+    redis.call("zremrangebyscore", permits_key, 0, now_ms - interval)
 
     local permit_record = request_id .. ":" .. i .. ":" .. permits
     redis.call("zadd", permits_key, now_ms, permit_record)

@@ -7,6 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 向量存储Repository
  * 负责向量数据的增删改查操作
@@ -105,5 +108,56 @@ public class VectorRepository {
             throw new BusinessException(
                 ErrorCode.KNOWLEDGE_BASE_VECTORIZATION_FAILED, "提升临时向量数据失败");
         }
+    }
+
+    /**
+     * 按知识库 ID 列表读取向量分块（供 BM25 关键词检索使用）。
+     * <p>
+     * 空列表视为不过滤（与向量搜索"空=搜全部"语义一致）。
+     *
+     * @param knowledgeBaseIds 知识库 ID 列表，可为空
+     * @return 分块列表；查询失败时返回空列表（检索侧走降级，不抛异常）
+     */
+    public List<VectorChunk> findChunksByKnowledgeBaseIds(List<Long> knowledgeBaseIds) {
+        String sql;
+        Object[] args;
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            sql = """
+                SELECT id::text AS id, content, metadata->>'kb_id' AS kb_id
+                FROM vector_store
+                """;
+            args = new Object[0];
+        } else {
+            String placeholders = String.join(",", knowledgeBaseIds.stream().map(id -> "?").toList());
+            sql = """
+                SELECT id::text AS id, content, metadata->>'kb_id' AS kb_id
+                FROM vector_store
+                WHERE metadata->>'kb_id' IN (%s)
+                """.formatted(placeholders);
+            args = knowledgeBaseIds.stream().map(String::valueOf).toArray();
+        }
+        try {
+            List<VectorChunk> chunks = jdbcTemplate.query(
+                sql, (rs, rowNum) -> new VectorChunk(
+                    rs.getString("id"),
+                    rs.getString("content"),
+                    rs.getString("kb_id")
+                ), args);
+            log.debug("读取向量分块成功: kbIds={}, chunks={}", knowledgeBaseIds, chunks.size());
+            return chunks;
+        } catch (Exception e) {
+            log.warn("读取向量分块失败，BM25 检索将降级: kbIds={}, error={}", knowledgeBaseIds, e.getMessage(), e);
+            return List.of();
+        }
+    }
+
+    /**
+     * 向量分块记录（用于 BM25 检索）。
+     *
+     * @param id      chunk 的 UUID 字符串（与向量搜索返回的 Document id 一致，用于 RRF 去重）
+     * @param content chunk 文本
+     * @param kbId    所属知识库 ID 字符串
+     */
+    public record VectorChunk(String id, String content, String kbId) {
     }
 }

@@ -75,6 +75,12 @@ app:
         topk-long: 8
         min-score-short: 0.18
         min-score-default: 0.28
+      hybrid:
+        enabled: true
+        candidate-multiplier: 3
+        bm25-k1: 1.2
+        bm25-b: 0.75
+        rrf-k: 60
   interview:
     follow-up-count: 1
     evaluation:
