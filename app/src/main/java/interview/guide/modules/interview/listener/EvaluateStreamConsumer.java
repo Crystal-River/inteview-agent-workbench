@@ -4,7 +4,7 @@ import interview.guide.common.async.AbstractStreamConsumer;
 import interview.guide.common.ai.LlmProviderRegistry;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
 import interview.guide.common.model.AsyncTaskStatus;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import interview.guide.modules.interview.model.InterviewAnswerEntity;
 import interview.guide.modules.interview.model.InterviewQuestionDTO;
 import interview.guide.modules.interview.model.InterviewReportDTO;
@@ -13,7 +13,6 @@ import interview.guide.modules.interview.repository.InterviewSessionRepository;
 import interview.guide.modules.interview.service.AnswerEvaluationService;
 import interview.guide.modules.interview.service.InterviewPersistenceService;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.stream.StreamMessageId;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
@@ -38,14 +37,14 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
     private final LlmProviderRegistry llmProviderRegistry;
 
     public EvaluateStreamConsumer(
-        RedisService redisService,
+        TaskMessageBroker messageBroker,
         InterviewSessionRepository sessionRepository,
         AnswerEvaluationService evaluationService,
         InterviewPersistenceService persistenceService,
         ObjectMapper objectMapper,
         LlmProviderRegistry llmProviderRegistry
     ) {
-        super(redisService);
+        super(messageBroker);
         this.sessionRepository = sessionRepository;
         this.evaluationService = evaluationService;
         this.persistenceService = persistenceService;
@@ -81,7 +80,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
     }
 
     @Override
-    protected EvaluatePayload parsePayload(StreamMessageId messageId, Map<String, String> data) {
+    protected EvaluatePayload parsePayload(String messageId, Map<String, String> data) {
         String sessionId = data.get(AsyncTaskStreamConstants.FIELD_SESSION_ID);
         if (sessionId == null) {
             log.warn("消息格式错误，跳过: messageId={}", messageId);
@@ -159,11 +158,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
                 AsyncTaskStreamConstants.FIELD_RETRY_COUNT, String.valueOf(retryCount)
             );
 
-            redisService().streamAdd(
-                AsyncTaskStreamConstants.INTERVIEW_EVALUATE_STREAM_KEY,
-                message,
-                AsyncTaskStreamConstants.STREAM_MAX_LEN
-            );
+            republish(message);
             log.info("评估任务已重新入队: sessionId={}, retryCount={}", sessionId, retryCount);
 
         } catch (Exception e) {

@@ -1,33 +1,28 @@
 package interview.guide.common.async;
 
-import interview.guide.common.constant.AsyncTaskStreamConstants;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 
 /**
- * Redis Stream 生产者模板基类。
+ * 异步任务生产者模板基类。
  * 统一消息发送骨架与失败处理逻辑。
  */
 @Slf4j
 public abstract class AbstractStreamProducer<T> {
 
-    private final RedisService redisService;
+    private final TaskMessageBroker messageBroker;
 
-    protected AbstractStreamProducer(RedisService redisService) {
-        this.redisService = redisService;
+    protected AbstractStreamProducer(TaskMessageBroker messageBroker) {
+        this.messageBroker = messageBroker;
     }
 
     protected boolean sendTask(T payload) {
         try {
-            String messageId = redisService.streamAdd(
-                streamKey(),
-                buildMessage(payload),
-                AsyncTaskStreamConstants.STREAM_MAX_LEN
-            );
-            log.info("{}任务已发送到Stream: {}, messageId={}",
-                taskDisplayName(), payloadIdentifier(payload), messageId);
+            messageBroker.publish(streamKey(), buildMessage(payload));
+            log.info("{}任务已发送到队列: {}",
+                taskDisplayName(), payloadIdentifier(payload));
             return true;
         } catch (Exception e) {
             log.error("发送{}任务失败: {}, error={}",

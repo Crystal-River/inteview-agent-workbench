@@ -1,104 +1,72 @@
 package interview.guide.common.async;
 
+import com.rabbitmq.client.Channel;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.stream.StreamMessageId;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public abstract class AbstractStreamConsumer<T> {
 
-    private final RedisService redisService;
-    private final AtomicBoolean running = new AtomicBoolean(false);
-    private ExecutorService executorService;
+    private final TaskMessageBroker messageBroker;
     private String consumerName;
+    private SimpleMessageListenerContainer container;
+    private Channel currentChannel;
+    private Long currentDeliveryTag;
 
-    protected AbstractStreamConsumer(RedisService redisService) {
-        this.redisService = redisService;
+    protected AbstractStreamConsumer(TaskMessageBroker messageBroker) {
+        this.messageBroker = messageBroker;
     }
 
     @PostConstruct
     public void init() {
         this.consumerName = consumerPrefix() + UUID.randomUUID().toString().substring(0, 8);
-        this.executorService = new ThreadPoolExecutor(
-            1,
-            1,
-            0L,
-            TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<>(),
-            r -> {
-                Thread t = new Thread(r, threadName());
-                t.setDaemon(true);
-                return t;
-            },
-            new ThreadPoolExecutor.AbortPolicy()
-        );
-
-        running.set(true);
-        executorService.submit(this::startConsumer);
-        log.info("{} consumer started: consumerName={}", taskDisplayName(), consumerName);
+        this.container = messageBroker.newListenerContainer(
+            streamKey(), consumerName, threadName(), this::onMessage);
+        this.container.start();
+        log.info("{} consumer started: queue={}, group={}, consumerName={}",
+            taskDisplayName(), streamKey(), groupName(), consumerName);
     }
 
     @PreDestroy
     public void shutdown() {
-        running.set(false);
-        if (executorService != null) {
-            executorService.shutdown();
+        if (container != null) {
+            container.stop();
         }
         log.info("{} consumer stopped: consumerName={}", taskDisplayName(), consumerName);
     }
 
-    private void startConsumer() {
+    private void onMessage(Message message, Channel channel) {
+        String messageId = String.valueOf(message.getMessageProperties().getDeliveryTag());
+        this.currentChannel = channel;
+        this.currentDeliveryTag = message.getMessageProperties().getDeliveryTag();
         try {
-            redisService.createStreamGroup(streamKey(), groupName());
-            log.info("Redis Stream group is ready: {}", groupName());
+            Map<String, String> data = messageBroker.convert(message);
+            processMessage(messageId, data);
         } catch (Exception e) {
-            log.warn("Failed to prepare Redis Stream group: groupName={}", groupName(), e);
-        }
-
-        consumeLoop();
-    }
-
-    private void consumeLoop() {
-        while (running.get()) {
-            try {
-                redisService.streamConsumeMessages(
-                    streamKey(),
-                    groupName(),
-                    consumerName,
-                    AsyncTaskStreamConstants.BATCH_SIZE,
-                    AsyncTaskStreamConstants.POLL_INTERVAL_MS,
-                    AsyncTaskStreamConstants.PENDING_IDLE_TIMEOUT_MS,
-                    AsyncTaskStreamConstants.PENDING_CLAIM_BATCH_SIZE,
-                    this::processMessage
-                );
-            } catch (Exception e) {
-                if (Thread.currentThread().isInterrupted()) {
-                    log.info("Consumer thread interrupted");
-                    break;
-                }
-                log.error("Failed to consume message", e);
-            }
+            log.error("{} 消息解析失败，ack 丢弃: messageId={}",
+                taskDisplayName(), messageId, e);
+            ackMessage(messageId);
+        } finally {
+            this.currentChannel = null;
+            this.currentDeliveryTag = null;
         }
     }
 
-    private void processMessage(StreamMessageId messageId, Map<String, String> data) {
+    private void processMessage(String messageId, Map<String, String> data) {
         T payload;
         try {
             payload = parsePayload(messageId, data);
         } catch (Exception e) {
             Object fields = data == null ? null : data.keySet();
-            log.warn("Failed to parse {} stream message, ack and discard: messageId={}, fields={}",
+            log.warn("Failed to parse {} message, ack and discard: messageId={}, fields={}",
                 taskDisplayName(), messageId, fields, e);
             ackMessage(messageId);
             return;
@@ -159,16 +127,22 @@ public abstract class AbstractStreamConsumer<T> {
         return error.length() > 500 ? error.substring(0, 500) : error;
     }
 
-    private void ackMessage(StreamMessageId messageId) {
+    private void ackMessage(String messageId) {
+        Channel channel = this.currentChannel;
+        Long deliveryTag = this.currentDeliveryTag;
+        if (channel == null || deliveryTag == null) {
+            log.warn("无可用 channel/deliveryTag，跳过 ACK: messageId={}", messageId);
+            return;
+        }
         try {
-            redisService.streamAck(streamKey(), groupName(), messageId);
+            channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
-            log.error("Failed to ack stream message: messageId={}", messageId, e);
+            log.error("Failed to ack message: messageId={}", messageId, e);
         }
     }
 
-    protected RedisService redisService() {
-        return redisService;
+    protected void republish(Map<String, String> message) {
+        messageBroker.publish(streamKey(), message);
     }
 
     protected abstract String taskDisplayName();
@@ -181,7 +155,7 @@ public abstract class AbstractStreamConsumer<T> {
 
     protected abstract String threadName();
 
-    protected abstract T parsePayload(StreamMessageId messageId, Map<String, String> data);
+    protected abstract T parsePayload(String messageId, Map<String, String> data);
 
     protected abstract String payloadIdentifier(T payload);
 

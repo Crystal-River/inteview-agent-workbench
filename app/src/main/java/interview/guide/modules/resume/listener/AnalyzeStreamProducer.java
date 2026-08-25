@@ -4,7 +4,7 @@ import interview.guide.common.async.AbstractStreamProducer;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
 import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.common.transaction.TransactionalExecutor;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import interview.guide.modules.resume.repository.ResumeRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -25,11 +25,11 @@ public class AnalyzeStreamProducer extends AbstractStreamProducer<AnalyzeStreamP
     record AnalyzeTaskPayload(Long resumeId, String content) {}
 
     public AnalyzeStreamProducer(
-        RedisService redisService,
+        TaskMessageBroker messageBroker,
         ResumeRepository resumeRepository,
         TransactionalExecutor transactionalExecutor
     ) {
-        super(redisService);
+        super(messageBroker);
         this.resumeRepository = resumeRepository;
         this.transactionalExecutor = transactionalExecutor;
     }

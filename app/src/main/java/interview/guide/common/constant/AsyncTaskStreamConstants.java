@@ -30,36 +30,16 @@ public final class AsyncTaskStreamConstants {
     public static final int MAX_RETRY_COUNT = 3;
 
     /**
-     * 每次拉取的消息批次大小
-     */
-    public static final int BATCH_SIZE = 10;
-
-    /**
-     * Pending 消息空闲超过该时间后允许被当前消费者认领（毫秒）
-     */
-    public static final long PENDING_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
-
-    /**
-     * 每轮最多回收的 pending 消息数
-     */
-    public static final int PENDING_CLAIM_BATCH_SIZE = 10;
-
-    /**
-     * 消费者轮询间隔（毫秒）
-     */
-    public static final long POLL_INTERVAL_MS = 1000;
-
-    /**
-     * Stream 最大长度（自动裁剪旧消息，防止无限增长）
+     * 队列最大长度（x-max-length，溢出丢弃最旧消息，防止无限增长）
      */
     public static final int STREAM_MAX_LEN = 1000;
 
     // ========== 知识库向量化 Stream 配置 ==========
 
     /**
-     * 知识库向量化 Stream Key
+     * 知识库向量化队列名
      */
-    public static final String KB_VECTORIZE_STREAM_KEY = "knowledgebase:vectorize:stream";
+    public static final String KB_VECTORIZE_STREAM_KEY = "knowledgebase.vectorize.queue";
 
     /**
      * 知识库向量化 Consumer Group 名称
@@ -79,9 +59,9 @@ public final class AsyncTaskStreamConstants {
     // ========== 简历分析 Stream 配置 ==========
 
     /**
-     * 简历分析 Stream Key
+     * 简历分析队列名
      */
-    public static final String RESUME_ANALYZE_STREAM_KEY = "resume:analyze:stream";
+    public static final String RESUME_ANALYZE_STREAM_KEY = "resume.analyze.queue";
 
     /**
      * 简历分析 Consumer Group 名称
@@ -101,9 +81,9 @@ public final class AsyncTaskStreamConstants {
     // ========== 面试评估 Stream 配置 ==========
 
     /**
-     * 面试评估 Stream Key
+     * 面试评估队列名
      */
-    public static final String INTERVIEW_EVALUATE_STREAM_KEY = "interview:evaluate:stream";
+    public static final String INTERVIEW_EVALUATE_STREAM_KEY = "interview.evaluate.queue";
 
     /**
      * 面试评估 Consumer Group 名称
@@ -123,9 +103,9 @@ public final class AsyncTaskStreamConstants {
     // ========== 语音面试评估 Stream 配置 ==========
 
     /**
-     * 语音面试评估 Stream Key
+     * 语音面试评估队列名
      */
-    public static final String VOICE_EVALUATE_STREAM_KEY = "voice:evaluate:stream";
+    public static final String VOICE_EVALUATE_STREAM_KEY = "voice.evaluate.queue";
 
     /**
      * 语音面试评估 Consumer Group 名称
@@ -145,9 +125,9 @@ public final class AsyncTaskStreamConstants {
     // ========== 知识库问题生成 Stream 配置 ==========
 
     /**
-     * 知识库问题生成 Stream Key
+     * 知识库问题生成队列名
      */
-    public static final String KB_QUESTION_GEN_STREAM_KEY = "knowledgebase:question-gen:stream";
+    public static final String KB_QUESTION_GEN_STREAM_KEY = "knowledgebase.question-gen.queue";
 
     /**
      * 知识库问题生成 Consumer Group 名称

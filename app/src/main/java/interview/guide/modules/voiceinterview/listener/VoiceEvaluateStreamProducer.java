@@ -4,7 +4,7 @@ import interview.guide.common.async.AbstractStreamProducer;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
 import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.common.transaction.TransactionalExecutor;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -22,10 +22,10 @@ public class VoiceEvaluateStreamProducer extends AbstractStreamProducer<String> 
     private final VoiceInterviewService voiceInterviewService;
     private final TransactionalExecutor transactionalExecutor;
 
-    public VoiceEvaluateStreamProducer(RedisService redisService,
+    public VoiceEvaluateStreamProducer(TaskMessageBroker messageBroker,
                                        @Lazy VoiceInterviewService voiceInterviewService,
                                        TransactionalExecutor transactionalExecutor) {
-        super(redisService);
+        super(messageBroker);
         this.voiceInterviewService = voiceInterviewService;
         this.transactionalExecutor = transactionalExecutor;
     }

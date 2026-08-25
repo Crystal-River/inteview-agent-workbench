@@ -58,7 +58,31 @@ services:
       retries: 5
 
   # =========================================
-  # 3. MinIO 对象存储服务
+  # 3. RabbitMQ 消息队列服务
+  # -----------------------------------------
+  # 作用：
+  #   - 异步任务消息中间件（简历分析、面试评估、向量化、题目生成）
+  #   - 管理控制台：http://localhost:15672
+  # =========================================
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: interview-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # =========================================
+  # 4. MinIO 对象存储服务
   # -----------------------------------------
   # 作用：
   #   - 存储非结构化数据：用户上传的简历(PDF/Word)、头像、知识库文档等
@@ -89,7 +113,7 @@ services:
       retries: 5
 
   # =========================================
-  # 4. MinIO 初始化任务 (Init Container Pattern)
+  # 5. MinIO 初始化任务 (Init Container Pattern)
   # -----------------------------------------
   # 作用：
   #   - 自动创建项目所需的存储桶 (Bucket)
@@ -117,7 +141,7 @@ services:
       "
 
   # =========================================
-  # 5. 后端应用服务 (Spring Boot)
+  # 6. 后端应用服务 (Spring Boot)
   # -----------------------------------------
   # 作用：
   #   - 提供 RESTful API
@@ -133,6 +157,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -150,6 +176,12 @@ services:
       # === Redis 连接 ===
       REDIS_HOST: redis
       REDIS_PORT: 6379
+
+      # === RabbitMQ 连接 ===
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       
       # === 对象存储配置 ===
       # 注意：后端在容器内访问 MinIO，使用 http://minio:9000
@@ -172,7 +204,7 @@ services:
       - "8080:8080"
 
   # =========================================
-  # 6. 前端应用服务 (Vue/React + Nginx)
+  # 7. 前端应用服务 (Vue/React + Nginx)
   # -----------------------------------------
   # 作用：
   #   - 提供用户界面
@@ -196,3 +228,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  rabbitmq_data:

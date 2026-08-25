@@ -2,12 +2,11 @@ package interview.guide.modules.knowledgebase.listener;
 
 import interview.guide.common.async.AbstractStreamConsumer;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import interview.guide.modules.knowledgebase.model.VectorStatus;
 import interview.guide.modules.knowledgebase.repository.KnowledgeBaseRepository;
 import interview.guide.modules.knowledgebase.service.KnowledgeBaseVectorService;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.stream.StreamMessageId;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -24,11 +23,11 @@ public class VectorizeStreamConsumer extends AbstractStreamConsumer<VectorizeStr
     private final KnowledgeBaseRepository knowledgeBaseRepository;
 
     public VectorizeStreamConsumer(
-        RedisService redisService,
+        TaskMessageBroker messageBroker,
         KnowledgeBaseVectorService vectorService,
         KnowledgeBaseRepository knowledgeBaseRepository
     ) {
-        super(redisService);
+        super(messageBroker);
         this.vectorService = vectorService;
         this.knowledgeBaseRepository = knowledgeBaseRepository;
     }
@@ -61,7 +60,7 @@ public class VectorizeStreamConsumer extends AbstractStreamConsumer<VectorizeStr
     }
 
     @Override
-    protected VectorizePayload parsePayload(StreamMessageId messageId, Map<String, String> data) {
+    protected VectorizePayload parsePayload(String messageId, Map<String, String> data) {
         String kbIdStr = data.get(AsyncTaskStreamConstants.FIELD_KB_ID);
         String content = data.get(AsyncTaskStreamConstants.FIELD_CONTENT);
         if (kbIdStr == null || content == null) {
@@ -119,11 +118,7 @@ public class VectorizeStreamConsumer extends AbstractStreamConsumer<VectorizeStr
                 AsyncTaskStreamConstants.FIELD_RETRY_COUNT, String.valueOf(retryCount)
             );
 
-            redisService().streamAdd(
-                AsyncTaskStreamConstants.KB_VECTORIZE_STREAM_KEY,
-                message,
-                AsyncTaskStreamConstants.STREAM_MAX_LEN
-            );
+            republish(message);
             log.info("向量化任务已重新入队: kbId={}, retryCount={}", kbId, retryCount);
 
         } catch (Exception e) {

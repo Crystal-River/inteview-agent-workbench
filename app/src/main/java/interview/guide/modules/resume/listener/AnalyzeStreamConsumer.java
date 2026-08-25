@@ -3,14 +3,13 @@ package interview.guide.modules.resume.listener;
 import interview.guide.common.async.AbstractStreamConsumer;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
 import interview.guide.common.model.AsyncTaskStatus;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import interview.guide.modules.interview.model.ResumeAnalysisResponse;
 import interview.guide.modules.resume.model.ResumeEntity;
 import interview.guide.modules.resume.repository.ResumeRepository;
 import interview.guide.modules.resume.service.ResumeGradingService;
 import interview.guide.modules.resume.service.ResumePersistenceService;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.stream.StreamMessageId;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -28,12 +27,12 @@ public class AnalyzeStreamConsumer extends AbstractStreamConsumer<AnalyzeStreamC
     private final ResumeRepository resumeRepository;
 
     public AnalyzeStreamConsumer(
-        RedisService redisService,
+        TaskMessageBroker messageBroker,
         ResumeGradingService gradingService,
         ResumePersistenceService persistenceService,
         ResumeRepository resumeRepository
     ) {
-        super(redisService);
+        super(messageBroker);
         this.gradingService = gradingService;
         this.persistenceService = persistenceService;
         this.resumeRepository = resumeRepository;
@@ -67,7 +66,7 @@ public class AnalyzeStreamConsumer extends AbstractStreamConsumer<AnalyzeStreamC
     }
 
     @Override
-    protected AnalyzePayload parsePayload(StreamMessageId messageId, Map<String, String> data) {
+    protected AnalyzePayload parsePayload(String messageId, Map<String, String> data) {
         String resumeIdStr = data.get(AsyncTaskStreamConstants.FIELD_RESUME_ID);
         String content = data.get(AsyncTaskStreamConstants.FIELD_CONTENT);
         if (resumeIdStr == null || content == null) {
@@ -132,11 +131,7 @@ public class AnalyzeStreamConsumer extends AbstractStreamConsumer<AnalyzeStreamC
                 AsyncTaskStreamConstants.FIELD_RETRY_COUNT, String.valueOf(retryCount)
             );
 
-            redisService().streamAdd(
-                AsyncTaskStreamConstants.RESUME_ANALYZE_STREAM_KEY,
-                message,
-                AsyncTaskStreamConstants.STREAM_MAX_LEN
-            );
+            republish(message);
             log.info("简历分析任务已重新入队: resumeId={}, retryCount={}", resumeId, retryCount);
 
         } catch (Exception e) {

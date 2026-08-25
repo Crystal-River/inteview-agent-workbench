@@ -2,12 +2,11 @@ package interview.guide.modules.knowledgebase.listener;
 
 import interview.guide.common.async.AbstractStreamConsumer;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import interview.guide.modules.knowledgebase.model.QuestionGenerationConfig;
 import interview.guide.modules.knowledgebase.service.KnowledgeBaseQuestionGenerationService;
 import interview.guide.modules.knowledgebase.service.QuestionGenerationStateService;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.stream.StreamMessageId;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -28,12 +27,12 @@ public class QuestionGenStreamConsumer
   }
 
   public QuestionGenStreamConsumer(
-      RedisService redisService,
+      TaskMessageBroker messageBroker,
       KnowledgeBaseQuestionGenerationService generationService,
       QuestionGenerationStateService stateService,
       QuestionGenStreamProducer producer
   ) {
-    super(redisService);
+    super(messageBroker);
     this.generationService = generationService;
     this.stateService = stateService;
     this.producer = producer;
@@ -66,7 +65,7 @@ public class QuestionGenStreamConsumer
 
   @Override
   protected QuestionGenPayload parsePayload(
-      StreamMessageId messageId,
+      String messageId,
       Map<String, String> data
   ) {
     String kbId = data.get(AsyncTaskStreamConstants.FIELD_KB_ID);

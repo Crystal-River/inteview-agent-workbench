@@ -2,7 +2,7 @@ package interview.guide.modules.knowledgebase.listener;
 
 import interview.guide.common.async.AbstractStreamProducer;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import interview.guide.modules.knowledgebase.service.QuestionGenerationStateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -23,10 +23,10 @@ public class QuestionGenStreamProducer
   }
 
   public QuestionGenStreamProducer(
-      RedisService redisService,
+      TaskMessageBroker messageBroker,
       QuestionGenerationStateService stateService
   ) {
-    super(redisService);
+    super(messageBroker);
     this.stateService = stateService;
   }
 

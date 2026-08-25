@@ -8,7 +8,7 @@ Spring Boot 4.1.0 + Java 25 + Spring AI 2.0.0 + React 面试平台。
 
 - Backend: Spring Boot 4.1.0 / Java 25 / Gradle / Spring AI 2.0.0
 - Database: PostgreSQL + pgvector，向量维度 1024，距离类型 COSINE
-- Cache & async: Redis / Redisson / Redis Stream
+- Cache & async: Redis / Redisson + RabbitMQ
 - Storage & parsing: RustFS/S3 / Apache Tika
 - Mapping & export: MapStruct / iText 8 / SpringDoc OpenAPI
 - Frontend: React 18 / TypeScript / Vite / TailwindCSS 4，代码在 `frontend/`
@@ -62,7 +62,7 @@ docker compose -f docker-compose.dev.yml up -d
 - 结构化输出统一走 `StructuredOutputInvoker`，不要在业务代码里复制重试逻辑。
 - Prompt 模板放在 `resources/prompts/`，使用 StringTemplate `.st`。
 - LLM、S3、外部 HTTP 调用不得放在数据库事务内。
-- Redis Stream 生产/消费使用 `AbstractStreamProducer` / `AbstractStreamConsumer` 模板。
+- RabbitMQ 生产/消费使用 `AbstractStreamProducer` / `AbstractStreamConsumer` 模板（底层 `TaskMessageBroker`）。
 - 异步处理前先校验实体是否存在；实体已删除时 ACK 丢弃。
 - 限流使用可重复 `@RateLimit`，不要手写散落的 Redis 限流逻辑。
 

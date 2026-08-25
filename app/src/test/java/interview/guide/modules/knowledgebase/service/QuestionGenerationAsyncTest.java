@@ -16,7 +16,7 @@ import interview.guide.modules.knowledgebase.model.QuestionGenerationConfig;
 import interview.guide.modules.knowledgebase.model.VectorStatus;
 import interview.guide.modules.knowledgebase.repository.KnowledgeBaseQuestionRepository;
 import interview.guide.modules.knowledgebase.repository.KnowledgeBaseRepository;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,7 +31,6 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
-import org.redisson.api.stream.StreamMessageId;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.core.type.TypeReference;
 
@@ -78,7 +77,7 @@ class QuestionGenerationAsyncTest {
   @Mock
   private QuestionGenStreamProducer questionGenStreamProducer;
   @Mock
-  private RedisService redisService;
+  private TaskMessageBroker taskMessageBroker;
   @Mock
   private ChatClient chatClient;
 
@@ -226,7 +225,7 @@ class QuestionGenerationAsyncTest {
 
       // 模拟 Consumer 的 shouldSkip 检查
       QuestionGenStreamConsumer consumer = new QuestionGenStreamConsumer(
-          redisService, generationService, stateService, questionGenStreamProducer);
+          taskMessageBroker, generationService, stateService, questionGenStreamProducer);
 
       boolean claimed = invokeTryMarkProcessing(consumer,
           new QuestionGenStreamConsumer.QuestionGenPayload(
@@ -241,7 +240,7 @@ class QuestionGenerationAsyncTest {
       when(knowledgeBaseRepository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
 
       QuestionGenStreamConsumer consumer = new QuestionGenStreamConsumer(
-          redisService, generationService, stateService, questionGenStreamProducer);
+          taskMessageBroker, generationService, stateService, questionGenStreamProducer);
 
       boolean claimed = invokeTryMarkProcessing(consumer,
           new QuestionGenStreamConsumer.QuestionGenPayload(
@@ -256,7 +255,7 @@ class QuestionGenerationAsyncTest {
       when(knowledgeBaseRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(kb));
 
       QuestionGenStreamConsumer consumer = new QuestionGenStreamConsumer(
-          redisService, generationService, stateService, questionGenStreamProducer);
+          taskMessageBroker, generationService, stateService, questionGenStreamProducer);
 
       boolean claimed = invokeTryMarkProcessing(consumer,
           new QuestionGenStreamConsumer.QuestionGenPayload(
@@ -271,7 +270,7 @@ class QuestionGenerationAsyncTest {
       when(knowledgeBaseRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(kb));
 
       QuestionGenStreamConsumer consumer = new QuestionGenStreamConsumer(
-          redisService, generationService, stateService, questionGenStreamProducer);
+          taskMessageBroker, generationService, stateService, questionGenStreamProducer);
 
       boolean claimed = invokeTryMarkProcessing(consumer,
           new QuestionGenStreamConsumer.QuestionGenPayload(
@@ -298,7 +297,7 @@ class QuestionGenerationAsyncTest {
           .executeGeneration(eq(1L), eq("task-1"), any(QuestionGenerationConfig.class));
 
       QuestionGenStreamConsumer consumer = new QuestionGenStreamConsumer(
-          redisService, failingService, stateService, questionGenStreamProducer);
+          taskMessageBroker, failingService, stateService, questionGenStreamProducer);
       invokeProcessMessage(consumer, Map.of(
           interview.guide.common.constant.AsyncTaskStreamConstants.FIELD_KB_ID, "1",
           interview.guide.common.constant.AsyncTaskStreamConstants.FIELD_TASK_ID, "task-1",
@@ -557,9 +556,9 @@ class QuestionGenerationAsyncTest {
       Map<String, String> data
   ) throws Exception {
     Method method = interview.guide.common.async.AbstractStreamConsumer.class
-        .getDeclaredMethod("processMessage", StreamMessageId.class, Map.class);
+        .getDeclaredMethod("processMessage", String.class, Map.class);
     method.setAccessible(true);
-    method.invoke(consumer, new StreamMessageId(1, 0), new HashMap<>(data));
+    method.invoke(consumer, "test-message-1", new HashMap<>(data));
   }
 
   private KnowledgeBaseQuestionRepository.CategoryCount categoryCount(

@@ -4,7 +4,7 @@ import interview.guide.common.async.AbstractStreamProducer;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
 import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.common.transaction.TransactionalExecutor;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import interview.guide.modules.interview.repository.InterviewSessionRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -23,11 +23,11 @@ public class EvaluateStreamProducer extends AbstractStreamProducer<String> {
     private final TransactionalExecutor transactionalExecutor;
 
     public EvaluateStreamProducer(
-        RedisService redisService,
+        TaskMessageBroker messageBroker,
         InterviewSessionRepository sessionRepository,
         TransactionalExecutor transactionalExecutor
     ) {
-        super(redisService);
+        super(messageBroker);
         this.sessionRepository = sessionRepository;
         this.transactionalExecutor = transactionalExecutor;
     }

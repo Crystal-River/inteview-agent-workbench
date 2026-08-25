@@ -27,6 +27,12 @@ spring:
           address: "redis://localhost:6379"
           database: 0
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
   ai:
     openai:
       base-url: https://dashscope.aliyuncs.com/compatible-mode

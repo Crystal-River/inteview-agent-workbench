@@ -3,12 +3,11 @@ package interview.guide.modules.voiceinterview.listener;
 import interview.guide.common.async.AbstractStreamConsumer;
 import interview.guide.common.constant.AsyncTaskStreamConstants;
 import interview.guide.common.model.AsyncTaskStatus;
-import interview.guide.infrastructure.redis.RedisService;
+import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import interview.guide.modules.voiceinterview.repository.VoiceInterviewSessionRepository;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewEvaluationService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.stream.StreamMessageId;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -25,12 +24,12 @@ public class VoiceEvaluateStreamConsumer extends AbstractStreamConsumer<VoiceEva
     private final VoiceInterviewSessionRepository sessionRepository;
 
     public VoiceEvaluateStreamConsumer(
-        RedisService redisService,
+        TaskMessageBroker messageBroker,
         VoiceInterviewService voiceInterviewService,
         VoiceInterviewEvaluationService evaluationService,
         VoiceInterviewSessionRepository sessionRepository
     ) {
-        super(redisService);
+        super(messageBroker);
         this.voiceInterviewService = voiceInterviewService;
         this.evaluationService = evaluationService;
         this.sessionRepository = sessionRepository;
@@ -64,7 +63,7 @@ public class VoiceEvaluateStreamConsumer extends AbstractStreamConsumer<VoiceEva
     }
 
     @Override
-    protected VoiceEvaluatePayload parsePayload(StreamMessageId messageId, Map<String, String> data) {
+    protected VoiceEvaluatePayload parsePayload(String messageId, Map<String, String> data) {
         String sessionId = data.get(AsyncTaskStreamConstants.FIELD_VOICE_SESSION_ID);
         if (sessionId == null) {
             log.warn("消息格式错误，跳过: messageId={}", messageId);
@@ -123,11 +122,7 @@ public class VoiceEvaluateStreamConsumer extends AbstractStreamConsumer<VoiceEva
                 AsyncTaskStreamConstants.FIELD_RETRY_COUNT, String.valueOf(retryCount)
             );
 
-            redisService().streamAdd(
-                AsyncTaskStreamConstants.VOICE_EVALUATE_STREAM_KEY,
-                message,
-                AsyncTaskStreamConstants.STREAM_MAX_LEN
-            );
+            republish(message);
             log.info("语音面试评估任务已重新入队: sessionId={}, retryCount={}", sessionId, retryCount);
         } catch (Exception e) {
             log.error("重试入队失败: sessionId={}, error={}", sessionId, e.getMessage(), e);

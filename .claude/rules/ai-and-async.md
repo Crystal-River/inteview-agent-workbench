@@ -4,6 +4,7 @@ paths:
   - "app/src/main/java/interview/guide/common/annotation/**/*.java"
   - "app/src/main/java/interview/guide/common/aspect/**/*.java"
   - "app/src/main/java/interview/guide/common/async/**/*.java"
+  - "app/src/main/java/interview/guide/infrastructure/messaging/**/*.java"
   - "app/src/main/java/interview/guide/modules/**/listener/**/*.java"
   - "app/src/main/resources/prompts/**/*.st"
   - "app/src/main/resources/scripts/**/*.lua"
@@ -31,10 +32,10 @@ paths:
 - Redis Key 使用 `ratelimit:{ClassName:MethodName}:dimension` 结构。
 - 不要在 Controller 或 Service 中手写散落的限流逻辑。
 
-## Redis Stream
+## Async Messaging (RabbitMQ)
 
 - 生产者继承 `AbstractStreamProducer<T>`。
-- 消费者继承 `AbstractStreamConsumer<T>` 并实现 `processMessage()`。
-- Stream 名称、消费者组和任务常量放在 `AsyncTaskStreamConstants`。
-- 消费失败最多重试 3 次，超过后标记 FAILED。
+- 消费者继承 `AbstractStreamConsumer<T>` 并实现 `parsePayload()` / `processBusiness()`。
+- 队列声明、发布与监听容器统一走 `TaskMessageBroker`；队列名和任务常量放在 `AsyncTaskStreamConstants`。
+- 消费失败最多重试 3 次（重发新消息），超过后标记 FAILED。
 - 异步处理前校验实体是否存在；已删除实体直接 ACK 丢弃。
