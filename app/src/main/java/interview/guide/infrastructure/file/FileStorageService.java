@@ -26,6 +26,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -102,6 +103,25 @@ public class FileStorageService {
     }
 
     private static final DateTimeFormatter DATE_PATH_FORMAT = DateTimeFormatter.ofPattern("yyyy/MM/dd");
+
+    /**
+     * 流式下载文件（适用于大文件，避免一次性读入内存）。
+     *
+     * @param fileKey 文件存储键
+     * @return 文件输入流，调用方负责关闭
+     */
+    public InputStream downloadFileStream(String fileKey) {
+        GetObjectRequest getRequest = GetObjectRequest.builder()
+                .bucket(storageConfig.getBucket())
+                .key(fileKey)
+                .build();
+        try {
+            return s3Client.getObject(getRequest);
+        } catch (S3Exception e) {
+            log.error("流式下载文件失败: {} - {}", fileKey, e.getMessage(), e);
+            throw new BusinessException(ErrorCode.STORAGE_DOWNLOAD_FAILED, "文件下载失败: " + e.getMessage());
+        }
+    }
 
     /**
      * 通用文件上传方法

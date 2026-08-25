@@ -99,6 +99,23 @@ java {
     }
 }
 
+// RAG 检索评估：独立 source set，脱离 src/main 业务代码。
+// 编译产物通过 bootRun 追加到 classpath，仅在 app.eval.enabled=true 时生效。
+sourceSets {
+    eval {
+        java.srcDirs = ['src/eval/java']
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+configurations {
+    evalCompileOnly.extendsFrom compileOnly
+    evalAnnotationProcessor.extendsFrom annotationProcessor
+    evalImplementation.extendsFrom implementation
+    evalRuntimeOnly.extendsFrom runtimeOnly
+}
+
 // 全局UTF-8编码配置
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
@@ -113,6 +130,9 @@ tasks.named('test') {
 // 将仓库根目录 .env 注入 bootRun，便于本地加载 AI_BAILIAN_API_KEY 等变量（Gradle 进程默认不读 .env）
 // 同时确保 JVM 使用 UTF-8 编码
 tasks.named('bootRun') {
+    // 追加 RAG 检索评估 source set 的编译产物（依赖已由 main runtimeClasspath 提供）
+    classpath += sourceSets.eval.output
+
     // JVM 编码配置（stdout/stderr：JDK 18+，避免控制台 PrintStream 与 Logback UTF-8 不一致）
     jvmArgs = [
             '-Dfile.encoding=UTF-8',

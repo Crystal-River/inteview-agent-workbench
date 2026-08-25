@@ -56,6 +56,60 @@ public final class AsyncTaskStreamConstants {
      */
     public static final String FIELD_KB_ID = "kbId";
 
+    // ========== 知识库大文件分块 Stream 配置 ==========
+
+    /**
+     * 知识库分块队列名
+     */
+    public static final String KB_CHUNKING_STREAM_KEY = "knowledgebase.chunking.queue";
+
+    /**
+     * 知识库分块 Consumer Group 名称
+     */
+    public static final String KB_CHUNKING_GROUP_NAME = "chunking-group";
+
+    /**
+     * 知识库分块 Consumer 名称前缀
+     */
+    public static final String KB_CHUNKING_CONSUMER_PREFIX = "chunking-consumer-";
+
+    // ========== 知识库大文件 Embedding Stream 配置 ==========
+
+    /**
+     * 知识库 Embedding 队列名
+     */
+    public static final String KB_EMBEDDING_STREAM_KEY = "knowledgebase.embedding.queue";
+
+    /**
+     * 知识库 Embedding Consumer Group 名称
+     */
+    public static final String KB_EMBEDDING_GROUP_NAME = "embedding-group";
+
+    /**
+     * 知识库 Embedding Consumer 名称前缀
+     */
+    public static final String KB_EMBEDDING_CONSUMER_PREFIX = "embedding-consumer-";
+
+    /**
+     * Embedding 队列最大长度（大文件批次数量可能远超普通队列上限，需要更大缓冲）。
+     */
+    public static final int KB_EMBEDDING_QUEUE_MAX_LEN = 100_000;
+
+    /**
+     * 向量化任务ID字段（用于 checkpoint 与幂等）
+     */
+    public static final String FIELD_JOB_ID = "jobId";
+
+    /**
+     * 分块起始索引字段
+     */
+    public static final String FIELD_CHUNK_START = "chunkStart";
+
+    /**
+     * 分块数量字段
+     */
+    public static final String FIELD_CHUNK_COUNT = "chunkCount";
+
     // ========== 简历分析 Stream 配置 ==========
 
     /**

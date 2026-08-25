@@ -28,3 +28,13 @@ frontend/test-results/
 frontend/playwright-report/
 /.agents
 skills-lock.json
+
+# Python (RAG 检索评估脚本)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+scripts/eval/testset.json
+scripts/eval/retrieval_results.json
+/scripts/eval/eval.iml
