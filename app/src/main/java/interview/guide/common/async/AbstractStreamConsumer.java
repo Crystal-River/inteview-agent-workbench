@@ -12,14 +12,18 @@ import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 异步任务消费者模板基类。
+ *
+ * <p>线程安全：channel / deliveryTag 均作为参数透传，不再保存为实例字段，
+ * 因此单容器开启 {@code consumerConcurrency() > 1} 时不会产生竞态。</p>
+ */
 @Slf4j
 public abstract class AbstractStreamConsumer<T> {
 
     private final TaskMessageBroker messageBroker;
     private String consumerName;
     private SimpleMessageListenerContainer container;
-    private Channel currentChannel;
-    private Long currentDeliveryTag;
 
     protected AbstractStreamConsumer(TaskMessageBroker messageBroker) {
         this.messageBroker = messageBroker;
@@ -29,10 +33,11 @@ public abstract class AbstractStreamConsumer<T> {
     public void init() {
         this.consumerName = consumerPrefix() + UUID.randomUUID().toString().substring(0, 8);
         this.container = messageBroker.newListenerContainer(
-            streamKey(), consumerName, threadName(), this::onMessage);
+            streamKey(), consumerName, threadName(), this::onMessage,
+            consumerConcurrency(), queueMaxLength());
         this.container.start();
-        log.info("{} consumer started: queue={}, group={}, consumerName={}",
-            taskDisplayName(), streamKey(), groupName(), consumerName);
+        log.info("{} consumer started: queue={}, group={}, consumerName={}, concurrency={}",
+            taskDisplayName(), streamKey(), groupName(), consumerName, consumerConcurrency());
     }
 
     @PreDestroy
@@ -45,22 +50,19 @@ public abstract class AbstractStreamConsumer<T> {
 
     private void onMessage(Message message, Channel channel) {
         String messageId = String.valueOf(message.getMessageProperties().getDeliveryTag());
-        this.currentChannel = channel;
-        this.currentDeliveryTag = message.getMessageProperties().getDeliveryTag();
+        long deliveryTag = message.getMessageProperties().getDeliveryTag();
         try {
             Map<String, String> data = messageBroker.convert(message);
-            processMessage(messageId, data);
+            processMessage(messageId, data, channel, deliveryTag);
         } catch (Exception e) {
             log.error("{} 消息解析失败，ack 丢弃: messageId={}",
                 taskDisplayName(), messageId, e);
-            ackMessage(messageId);
-        } finally {
-            this.currentChannel = null;
-            this.currentDeliveryTag = null;
+            ackMessage(messageId, channel, deliveryTag);
         }
     }
 
-    private void processMessage(String messageId, Map<String, String> data) {
+    private void processMessage(String messageId, Map<String, String> data,
+                                Channel channel, long deliveryTag) {
         T payload;
         try {
             payload = parsePayload(messageId, data);
@@ -68,12 +70,12 @@ public abstract class AbstractStreamConsumer<T> {
             Object fields = data == null ? null : data.keySet();
             log.warn("Failed to parse {} message, ack and discard: messageId={}, fields={}",
                 taskDisplayName(), messageId, fields, e);
-            ackMessage(messageId);
+            ackMessage(messageId, channel, deliveryTag);
             return;
         }
 
         if (payload == null) {
-            ackMessage(messageId);
+            ackMessage(messageId, channel, deliveryTag);
             return;
         }
 
@@ -83,18 +85,18 @@ public abstract class AbstractStreamConsumer<T> {
 
         try {
             if (shouldSkip(payload)) {
-                ackMessage(messageId);
+                ackMessage(messageId, channel, deliveryTag);
                 log.info("{} task skipped: {}", taskDisplayName(), payloadIdentifier(payload));
                 return;
             }
             if (!tryMarkProcessing(payload)) {
-                ackMessage(messageId);
+                ackMessage(messageId, channel, deliveryTag);
                 log.info("{} task was not claimed: {}", taskDisplayName(), payloadIdentifier(payload));
                 return;
             }
             processBusiness(payload);
             markCompleted(payload);
-            ackMessage(messageId);
+            ackMessage(messageId, channel, deliveryTag);
             log.info("{} task completed: {}", taskDisplayName(), payloadIdentifier(payload));
         } catch (Exception e) {
             log.error("{} task failed: {}", taskDisplayName(), payloadIdentifier(payload), e);
@@ -105,7 +107,7 @@ public abstract class AbstractStreamConsumer<T> {
                     taskDisplayName() + " failed after retry " + retryCount + ": " + e.getMessage()
                 ));
             }
-            ackMessage(messageId);
+            ackMessage(messageId, channel, deliveryTag);
         }
     }
 
@@ -127,13 +129,7 @@ public abstract class AbstractStreamConsumer<T> {
         return error.length() > 500 ? error.substring(0, 500) : error;
     }
 
-    private void ackMessage(String messageId) {
-        Channel channel = this.currentChannel;
-        Long deliveryTag = this.currentDeliveryTag;
-        if (channel == null || deliveryTag == null) {
-            log.warn("无可用 channel/deliveryTag，跳过 ACK: messageId={}", messageId);
-            return;
-        }
+    private void ackMessage(String messageId, Channel channel, long deliveryTag) {
         try {
             channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
@@ -142,7 +138,21 @@ public abstract class AbstractStreamConsumer<T> {
     }
 
     protected void republish(Map<String, String> message) {
-        messageBroker.publish(streamKey(), message);
+        messageBroker.publish(streamKey(), message, queueMaxLength());
+    }
+
+    /**
+     * 消费者并发数量（同一队列并发处理消息的消费者数），默认 1（逐条串行）。
+     */
+    protected int consumerConcurrency() {
+        return 1;
+    }
+
+    /**
+     * 队列最大长度（x-max-length），默认与普通任务队列一致；大文件 embedding 队列可覆盖。
+     */
+    protected int queueMaxLength() {
+        return AsyncTaskStreamConstants.STREAM_MAX_LEN;
     }
 
     protected abstract String taskDisplayName();

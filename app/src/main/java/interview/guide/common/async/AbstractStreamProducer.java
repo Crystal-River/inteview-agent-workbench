@@ -1,5 +1,6 @@
 package interview.guide.common.async;
 
+import interview.guide.common.constant.AsyncTaskStreamConstants;
 import interview.guide.infrastructure.messaging.TaskMessageBroker;
 import lombok.extern.slf4j.Slf4j;
 
@@ -20,7 +21,7 @@ public abstract class AbstractStreamProducer<T> {
 
     protected boolean sendTask(T payload) {
         try {
-            messageBroker.publish(streamKey(), buildMessage(payload));
+            messageBroker.publish(streamKey(), buildMessage(payload), queueMaxLength());
             log.info("{}任务已发送到队列: {}",
                 taskDisplayName(), payloadIdentifier(payload));
             return true;
@@ -37,6 +38,13 @@ public abstract class AbstractStreamProducer<T> {
             return null;
         }
         return error.length() > 500 ? error.substring(0, 500) : error;
+    }
+
+    /**
+     * 队列最大长度（x-max-length），默认与普通任务队列一致；大文件 embedding 队列可覆盖。
+     */
+    protected int queueMaxLength() {
+        return AsyncTaskStreamConstants.STREAM_MAX_LEN;
     }
 
     protected abstract String taskDisplayName();

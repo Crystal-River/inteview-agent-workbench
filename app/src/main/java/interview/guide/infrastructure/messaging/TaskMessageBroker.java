@@ -19,13 +19,14 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * RabbitMQ 消息门面。
  *
  * <p>封装队列声明、发布与监听容器构建，替代原先 Redis Stream 的消息路径。
  * 消息体为扁平 {@link Map}&lt;String,String&gt;，统一用 Jackson 3 序列化为 JSON 文本，
- * 避免默认类型头（__TypeId__）指向不可反序列化的不可变 Map。
+ * 避免默认类型头（__TypeId__）指向不可反序列化的不可变 Map。</p>
  */
 @Slf4j
 @Service
@@ -38,10 +39,17 @@ public class TaskMessageBroker {
   private final ObjectMapper objectMapper;
 
   /**
-   * 发布消息到指定队列（默认交换机，routing key = 队列名）。
+   * 发布消息到指定队列（默认交换机，routing key = 队列名），使用默认队列最大长度。
    */
   public void publish(String queueName, Map<String, String> message) {
-    declareQueue(queueName);
+    publish(queueName, message, AsyncTaskStreamConstants.STREAM_MAX_LEN);
+  }
+
+  /**
+   * 发布消息到指定队列，可指定队列最大长度（仅队列首次声明时生效）。
+   */
+  public void publish(String queueName, Map<String, String> message, int maxLength) {
+    declareQueue(queueName, maxLength);
     String json;
     try {
       json = objectMapper.writeValueAsString(message);
@@ -55,11 +63,18 @@ public class TaskMessageBroker {
    * 幂等声明 durable 队列，带 x-max-length 限制（溢出丢弃最旧消息）。
    *
    * <p>声明失败仅告警不抛出，避免 RabbitMQ 暂不可用时阻断应用启动或生产者入队；
-   * 后续 publish 会再次尝试声明。
+   * 后续 publish 会再次尝试声明。</p>
    */
   public void declareQueue(String queueName) {
+    declareQueue(queueName, AsyncTaskStreamConstants.STREAM_MAX_LEN);
+  }
+
+  /**
+   * 幂等声明 durable 队列，自定义最大长度。
+   */
+  public void declareQueue(String queueName, int maxLength) {
     Queue queue = QueueBuilder.durable(queueName)
-        .withArgument("x-max-length", AsyncTaskStreamConstants.STREAM_MAX_LEN)
+        .withArgument("x-max-length", maxLength)
         .withArgument("x-overflow", "drop-head")
         .build();
     try {
@@ -77,15 +92,32 @@ public class TaskMessageBroker {
       String consumerTag,
       String threadName,
       ChannelAwareMessageListener listener) {
-    declareQueue(queueName);
+    return newListenerContainer(queueName, consumerTag, threadName, listener, 1,
+        AsyncTaskStreamConstants.STREAM_MAX_LEN);
+  }
+
+  /**
+   * 构建未启动的监听容器，支持指定并发消费者数量与队列最大长度。
+   *
+   * <p>并发消费者共享同一消费者标签前缀，按序号追加后缀保证唯一。</p>
+   */
+  public SimpleMessageListenerContainer newListenerContainer(
+      String queueName,
+      String consumerTag,
+      String threadName,
+      ChannelAwareMessageListener listener,
+      int concurrency,
+      int maxLength) {
+    declareQueue(queueName, maxLength);
     SimpleMessageListenerContainer container = new SimpleMessageListenerContainer(connectionFactory);
     container.setQueueNames(queueName);
     container.setAmqpAdmin(amqpAdmin);
     container.setAcknowledgeMode(AcknowledgeMode.MANUAL);
-    container.setPrefetchCount(1);
-    container.setConcurrentConsumers(1);
+    container.setPrefetchCount(concurrency);
+    container.setConcurrentConsumers(concurrency);
     container.setDefaultRequeueRejected(false);
-    container.setConsumerTagStrategy(q -> consumerTag);
+    AtomicInteger tagIndex = new AtomicInteger();
+    container.setConsumerTagStrategy(q -> consumerTag + "-" + tagIndex.getAndIncrement());
     container.setMessageListener(listener);
     container.setTaskExecutor(new SimpleAsyncTaskExecutor(threadName));
     return container;

@@ -152,6 +152,21 @@ public class VectorRepository {
     }
 
     /**
+     * 重建 HNSW 向量索引（批量写入完成后一次性调用，避免频繁重建）。
+     */
+    public void rebuildIndex() {
+        String sql = "REINDEX INDEX spring_ai_vector_index";
+        try {
+            jdbcTemplate.execute(sql);
+            log.info("向量索引重建完成: spring_ai_vector_index");
+        } catch (Exception e) {
+            log.error("重建向量索引失败: error={}", e.getMessage(), e);
+            throw new BusinessException(
+                ErrorCode.KNOWLEDGE_BASE_VECTORIZATION_FAILED, "重建向量索引失败");
+        }
+    }
+
+    /**
      * 向量分块记录（用于 BM25 检索）。
      *
      * @param id      chunk 的 UUID 字符串（与向量搜索返回的 Document id 一致，用于 RRF 去重）

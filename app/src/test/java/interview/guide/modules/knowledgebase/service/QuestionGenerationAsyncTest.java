@@ -17,6 +17,7 @@ import interview.guide.modules.knowledgebase.model.VectorStatus;
 import interview.guide.modules.knowledgebase.repository.KnowledgeBaseQuestionRepository;
 import interview.guide.modules.knowledgebase.repository.KnowledgeBaseRepository;
 import interview.guide.infrastructure.messaging.TaskMessageBroker;
+import com.rabbitmq.client.Channel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -556,9 +557,9 @@ class QuestionGenerationAsyncTest {
       Map<String, String> data
   ) throws Exception {
     Method method = interview.guide.common.async.AbstractStreamConsumer.class
-        .getDeclaredMethod("processMessage", String.class, Map.class);
+        .getDeclaredMethod("processMessage", String.class, Map.class, Channel.class, long.class);
     method.setAccessible(true);
-    method.invoke(consumer, "test-message-1", new HashMap<>(data));
+    method.invoke(consumer, "test-message-1", new HashMap<>(data), mock(Channel.class), 1L);
   }
 
   private KnowledgeBaseQuestionRepository.CategoryCount categoryCount(
