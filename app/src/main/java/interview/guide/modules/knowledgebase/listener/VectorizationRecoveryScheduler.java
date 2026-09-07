@@ -4,6 +4,7 @@ import interview.guide.modules.knowledgebase.config.KnowledgeBasePipelinePropert
 import interview.guide.modules.knowledgebase.model.VectorizationJobEntity;
 import interview.guide.modules.knowledgebase.model.VectorizationStatus;
 import interview.guide.modules.knowledgebase.repository.VectorizationChunkRepository;
+import interview.guide.modules.knowledgebase.service.KnowledgeBaseEmbeddingService;
 import interview.guide.modules.knowledgebase.service.VectorizationJobService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +17,8 @@ import java.util.List;
 /**
  * 大文件向量化任务恢复调度器。
  *
- * <p>扫描卡死的 PARSING（重发分块任务）与 EMBEDDING（重发未完成批次）任务，实现断点恢复。</p>
+ * <p>扫描卡死的 PARSING（重发分块任务）、EMBEDDING（重发未完成批次）与
+ * FINALIZING（续跑收尾）任务，实现断点恢复。</p>
  */
 @Slf4j
 @Component
@@ -27,6 +29,7 @@ public class VectorizationRecoveryScheduler {
     private final VectorizationChunkRepository chunkRepository;
     private final ChunkingBatchProducer chunkingProducer;
     private final EmbeddingBatchProducer embeddingProducer;
+    private final KnowledgeBaseEmbeddingService embeddingService;
     private final KnowledgeBasePipelineProperties properties;
 
     @Scheduled(
@@ -36,6 +39,7 @@ public class VectorizationRecoveryScheduler {
         LocalDateTime now = LocalDateTime.now();
         recoverParsing(now.minusMinutes(properties.getRecovery().getParsingStaleMinutes()));
         recoverEmbedding(now.minusMinutes(properties.getRecovery().getEmbeddingStaleMinutes()));
+        recoverFinalizing(now.minusMinutes(properties.getRecovery().getFinalizingStaleMinutes()));
     }
 
     private void recoverParsing(LocalDateTime threshold) {
@@ -60,6 +64,14 @@ public class VectorizationRecoveryScheduler {
             }
             log.warn("恢复卡住的嵌入任务: kbId={}, jobId={}, total={}",
                 job.getKbId(), job.getJobId(), total);
+        }
+    }
+
+    private void recoverFinalizing(LocalDateTime threshold) {
+        List<VectorizationJobEntity> jobs = jobService.findStale(VectorizationStatus.FINALIZING, threshold);
+        for (VectorizationJobEntity job : jobs) {
+            embeddingService.resumeFinalize(job.getJobId(), job.getKbId());
+            log.warn("恢复卡住的 finalize 任务: kbId={}, jobId={}", job.getKbId(), job.getJobId());
         }
     }
 }

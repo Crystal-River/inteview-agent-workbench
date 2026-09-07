@@ -78,8 +78,7 @@ public class StructuredOutputInvoker {
                 ? securedSystemPrompt
                 : buildRetrySystemPrompt(securedSystemPrompt, lastError);
             try {
-                T result = callStructuredOutput(
-                    chatClient, attemptSystemPrompt, userPrompt, outputConverter, logContext, log);
+                T result = callStructuredOutput(chatClient, attemptSystemPrompt, userPrompt, outputConverter, logContext, log);
                 recordAttempt(contextTag, STATUS_SUCCESS);
                 recordInvocation(contextTag, STATUS_SUCCESS, startNanos);
                 return result;

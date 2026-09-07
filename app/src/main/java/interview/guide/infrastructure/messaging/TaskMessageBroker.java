@@ -1,6 +1,7 @@
 package interview.guide.infrastructure.messaging;
 
 import interview.guide.common.constant.AsyncTaskStreamConstants;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.AcknowledgeMode;
@@ -12,13 +13,15 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
-import org.springframework.core.task.SimpleAsyncTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -37,6 +40,9 @@ public class TaskMessageBroker {
   private final AmqpAdmin amqpAdmin;
   private final ConnectionFactory connectionFactory;
   private final ObjectMapper objectMapper;
+
+  /** 各监听容器创建的有界线程池，容器销毁时统一 shutdown。 */
+  private final List<ThreadPoolTaskExecutor> executors = new CopyOnWriteArrayList<>();
 
   /**
    * 发布消息到指定队列（默认交换机，routing key = 队列名），使用默认队列最大长度。
@@ -119,8 +125,30 @@ public class TaskMessageBroker {
     AtomicInteger tagIndex = new AtomicInteger();
     container.setConsumerTagStrategy(q -> consumerTag + "-" + tagIndex.getAndIncrement());
     container.setMessageListener(listener);
-    container.setTaskExecutor(new SimpleAsyncTaskExecutor(threadName));
+    container.setTaskExecutor(createExecutor(threadName, concurrency));
     return container;
+  }
+
+  /**
+   * 创建与消费者并发度匹配的有界线程池（线程可复用，避免 {@code SimpleAsyncTaskExecutor}
+   * 每任务新建线程的隐患）。
+   */
+  private ThreadPoolTaskExecutor createExecutor(String threadNamePrefix, int concurrency) {
+    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    executor.setCorePoolSize(concurrency);
+    executor.setMaxPoolSize(concurrency);
+    executor.setThreadNamePrefix(threadNamePrefix + "-");
+    executor.initialize();
+    executors.add(executor);
+    return executor;
+  }
+
+  @PreDestroy
+  public void shutdownExecutors() {
+    for (ThreadPoolTaskExecutor executor : executors) {
+      executor.shutdown();
+    }
+    executors.clear();
   }
 
   /**

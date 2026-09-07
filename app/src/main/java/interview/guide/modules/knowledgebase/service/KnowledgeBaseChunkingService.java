@@ -130,7 +130,7 @@ public class KnowledgeBaseChunkingService {
             });
             if (!embeddingProducer.sendEmbedBatch(jobId, kbId, startIndex, batch.size())) {
                 throw new BusinessException(
-                    ErrorCode.KNOWLEDGE_BASE_VECTORIZATION_FAILED, "嵌入任务入队失败");
+                        ErrorCode.KNOWLEDGE_BASE_VECTORIZATION_FAILED, "嵌入任务入队失败");
             }
         }
     }

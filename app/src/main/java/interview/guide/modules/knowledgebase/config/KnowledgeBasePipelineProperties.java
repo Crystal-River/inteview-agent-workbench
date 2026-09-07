@@ -54,6 +54,11 @@ public class KnowledgeBasePipelineProperties {
         private long embeddingStaleMinutes = 20;
 
         /**
+         * FINALIZING 阶段卡死判定阈值（分钟）。
+         */
+        private long finalizingStaleMinutes = 20;
+
+        /**
          * 恢复调度扫描间隔（毫秒）。
          */
         private long fixedDelayMs = 60_000;

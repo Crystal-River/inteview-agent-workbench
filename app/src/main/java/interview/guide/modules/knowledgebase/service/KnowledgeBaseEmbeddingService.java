@@ -115,6 +115,29 @@ public class KnowledgeBaseEmbeddingService {
     }
 
     /**
+     * 恢复被中断的 finalize（job 卡在 FINALIZING 但进程在收尾前崩溃）。
+     *
+     * <p>finalize 内部的 delete+promote 不可安全重放，但 {@code kb.vectorStatus=COMPLETED}
+     * 与 delete+promote 在同一事务提交，据此区分 FINALIZING 的两种子状态：
+     * <ul>
+     *   <li>KB 已 COMPLETED：事务已提交（delete+promote 成功），仅需补 {@code finishCompleted}。</li>
+     *   <li>KB 未 COMPLETED：事务未提交或已回滚，临时向量仍带 {@code pending:} 前缀，
+     *       重跑 finalize 安全（{@code deleteByKnowledgeBaseId} 不会误删它们）。</li>
+     * </ul>
+     */
+    public void resumeFinalize(String jobId, Long kbId) {
+        boolean completed = knowledgeBaseRepository.findById(kbId)
+            .map(kb -> kb.getVectorStatus() == VectorStatus.COMPLETED)
+            .orElse(false);
+        if (completed) {
+            jobService.finishCompleted(jobId);
+            log.info("恢复 finalize：事务已提交，仅补记 COMPLETED: kbId={}, jobId={}", kbId, jobId);
+            return;
+        }
+        finalize(jobId, kbId);
+    }
+
+    /**
      * 清理 finalize 失败遗留的临时向量数据（best-effort）。
      */
     private void cleanupPending(String jobId) {
